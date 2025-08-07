@@ -8,7 +8,8 @@ import PrivacySection from "@/components/privacy-section";
 import Footer from "@/components/footer";
 import { AdSenseResponsiveBanner, AdSenseRectangleBanner } from "@/components/adsense-banner";
 import AdSenseSidebar from "@/components/adsense-sidebar";
-import { getAdSlot, ADSENSE_CONFIG } from "@/config/adsense";
+import { AdSenseConfigHelper } from "@/components/adsense-demo";
+import { getAdSlot, ADSENSE_CONFIG, isAdSenseConfigured } from "@/config/adsense";
 import { ArrowUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -63,6 +64,17 @@ export default function Home() {
         </motion.div>
 
         <DownloadCard />
+        
+        {/* Configuration AdSense Helper - visible seulement si pas configuré */}
+        {!isAdSenseConfigured() && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.7 }}
+          >
+            <AdSenseConfigHelper />
+          </motion.div>
+        )}
         
         {/* Zone publicitaire entre download et platforms */}
         <motion.div

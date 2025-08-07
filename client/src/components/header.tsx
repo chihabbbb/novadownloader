@@ -1,4 +1,5 @@
-import { Download } from "lucide-react";
+import { Download, Settings, CheckCircle } from "lucide-react";
+import { isAdSenseConfigured } from "@/config/adsense";
 
 export default function Header() {
   return (
@@ -25,6 +26,25 @@ export default function Header() {
             <a href="#support" className="text-gray-300 hover:text-nova-cyan transition-colors duration-300">
               Support
             </a>
+            
+            {/* Indicateur de statut AdSense */}
+            <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-xs transition-all duration-300 ${
+              isAdSenseConfigured() 
+                ? "bg-green-500/20 text-green-400 border border-green-500/50" 
+                : "bg-yellow-500/20 text-yellow-400 border border-yellow-500/50 animate-pulse"
+            }`}>
+              {isAdSenseConfigured() ? (
+                <>
+                  <CheckCircle size={12} />
+                  <span>AdSense Activé</span>
+                </>
+              ) : (
+                <>
+                  <Settings size={12} />
+                  <span>Config AdSense</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </nav>
