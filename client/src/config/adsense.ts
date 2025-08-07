@@ -3,7 +3,7 @@
 
 export const ADSENSE_CONFIG = {
   // Votre client ID AdSense (à remplacer)
-  CLIENT_ID: "ca-pub-XXXXXXXXXXXXXXXXX",
+  CLIENT_ID: "pub-1326206466379328",
   
   // Slots d'annonces par position
   SLOTS: {
