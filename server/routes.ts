@@ -7,6 +7,8 @@ import ytdl from "@distube/ytdl-core";
 import path from "path";
 import fs from "fs";
 import { randomUUID } from "crypto";
+import { spawn } from "child_process";
+import { promisify } from "util";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health check
@@ -303,13 +305,46 @@ async function processDownload(downloadId: string, url: string, format: string, 
 
     let finalPath = filePath;
 
-    // For MP3, we would need to use FFmpeg to convert, but for now we'll use the audio stream directly
-    if (format === "mp3") {
+    // Convert to MP3 using FFmpeg if needed
+    if (format === "mp3" || (quality && quality.includes('Audio'))) {
       const mp3Path = path.join(downloadsDir, `${fileId}.mp3`);
-      // In a real implementation, you'd use FFmpeg here to convert mp4 to mp3
-      // For now, we'll just rename the file (this won't actually be proper MP3)
-      fs.renameSync(filePath, mp3Path);
-      finalPath = mp3Path;
+      
+      try {
+        await storage.updateDownload(downloadId, { progress: 95 });
+        
+        // Use FFmpeg to convert to MP3
+        await new Promise((resolve, reject) => {
+          const ffmpeg = spawn('ffmpeg', [
+            '-i', filePath,
+            '-vn', // No video
+            '-acodec', 'mp3',
+            '-ab', '192k', // Audio bitrate
+            '-ar', '44100', // Audio sample rate
+            '-y', // Overwrite output file
+            mp3Path
+          ]);
+          
+          ffmpeg.on('close', (code) => {
+            if (code === 0) {
+              // Delete original file after successful conversion
+              fs.unlinkSync(filePath);
+              resolve(mp3Path);
+            } else {
+              reject(new Error(`FFmpeg conversion failed with code ${code}`));
+            }
+          });
+          
+          ffmpeg.on('error', reject);
+        });
+        
+        finalPath = mp3Path;
+      } catch (conversionError) {
+        console.error('MP3 conversion error:', conversionError);
+        // Fallback: just rename the file
+        const mp3Path = path.join(downloadsDir, `${fileId}.mp3`);
+        fs.renameSync(filePath, mp3Path);
+        finalPath = mp3Path;
+      }
     }
 
     await storage.updateDownload(downloadId, {
