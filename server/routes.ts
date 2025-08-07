@@ -120,13 +120,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = downloadRequestSchema.parse(req.body);
       const { url, format, quality, itag } = validatedData;
 
-      // Validate YouTube URL
-      if (!ytdl.validateURL(url)) {
-        return res.status(400).json({ error: "Invalid YouTube URL" });
-      }
-
       // Detect platform
-      const platform = "youtube";
+      let platform = "unknown";
+      let errorMessage = "";
+      
+      if (ytdl.validateURL(url)) {
+        platform = "youtube";
+      } else if (url.includes("tiktok.com") || url.includes("vm.tiktok.com")) {
+        platform = "tiktok";
+        errorMessage = "TikTok n'est pas encore supporté. Seul YouTube est disponible actuellement.";
+      } else if (url.includes("instagram.com")) {
+        platform = "instagram";
+        errorMessage = "Instagram n'est pas encore supporté. Seul YouTube est disponible actuellement.";
+      } else if (url.includes("facebook.com") || url.includes("fb.watch")) {
+        platform = "facebook";
+        errorMessage = "Facebook n'est pas encore supporté. Seul YouTube est disponible actuellement.";
+      } else if (url.includes("twitter.com") || url.includes("x.com")) {
+        platform = "twitter";
+        errorMessage = "Twitter/X n'est pas encore supporté. Seul YouTube est disponible actuellement.";
+      } else {
+        errorMessage = "Cette plateforme n'est pas supportée. Seul YouTube est disponible actuellement.";
+      }
+      
+      // Only allow YouTube for now
+      if (platform !== "youtube") {
+        return res.status(400).json({ 
+          error: errorMessage,
+          platform: platform,
+          supportedPlatforms: ["YouTube"]
+        });
+      }
 
       // Create download record
       const download = await storage.createDownload({

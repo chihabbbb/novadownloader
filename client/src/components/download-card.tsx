@@ -66,9 +66,30 @@ export default function DownloadCard() {
       });
     },
     onError: (error: any) => {
+      let title = "Download Failed";
+      let description = error.message || "Failed to start download";
+      
+      // Parse error response for better messages
+      if (error.message && error.message.includes("TikTok")) {
+        title = "TikTok Non Supporté";
+        description = "TikTok n'est pas encore supporté. Seul YouTube fonctionne actuellement.";
+      } else if (error.message && error.message.includes("Instagram")) {
+        title = "Instagram Non Supporté";
+        description = "Instagram n'est pas encore supporté. Seul YouTube fonctionne actuellement.";
+      } else if (error.message && error.message.includes("Facebook")) {
+        title = "Facebook Non Supporté";
+        description = "Facebook n'est pas encore supporté. Seul YouTube fonctionne actuellement.";
+      } else if (error.message && error.message.includes("Twitter") || error.message && error.message.includes("X.com")) {
+        title = "Twitter/X Non Supporté";
+        description = "Twitter/X n'est pas encore supporté. Seul YouTube fonctionne actuellement.";
+      } else if (error.message && error.message.includes("plateforme n'est pas supportée")) {
+        title = "Plateforme Non Supportée";
+        description = "Cette plateforme n'est pas supportée. Seul YouTube fonctionne actuellement.";
+      }
+      
       toast({
-        title: "Download Failed",
-        description: error.message || "Failed to start download",
+        title,
+        description,
         variant: "destructive",
       });
     },
