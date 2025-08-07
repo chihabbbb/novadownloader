@@ -126,7 +126,7 @@ export default function DownloadCard() {
       return;
     }
 
-    if (validationData && !validationData.supported) {
+    if (validationData?.supported === false) {
       toast({
         title: "Platform Not Supported",
         description: "Currently only YouTube is supported",
@@ -196,7 +196,7 @@ export default function DownloadCard() {
             <div className="glass rounded-lg p-6 border border-white/20">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-3">
-                  {validationData.platform === "youtube" && (
+                  {(validationData?.platform === "youtube" || url.includes('youtube') || url.includes('youtu.be')) && (
                     <div className="w-8 h-8 bg-red-500 rounded-lg flex items-center justify-center">
                       <PlayCircle className="text-white" size={16} />
                     </div>
