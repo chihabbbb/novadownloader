@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { downloadRequestSchema } from "@shared/schema";
 import { z } from "zod";
-import ytdl from "ytdl-core";
+import ytdl from "@distube/ytdl-core";
 import path from "path";
 import fs from "fs";
 import { randomUUID } from "crypto";
@@ -30,10 +30,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isValid) {
         platform = "youtube";
         try {
-          const info = await ytdl.getBasicInfo(url);
+          const info = await ytdl.getBasicInfo(url, {
+            requestOptions: {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+              }
+            }
+          });
           title = info.videoDetails.title;
         } catch (error) {
           console.error("Error getting video info:", error);
+          // Même si on ne peut pas obtenir le titre, on indique que l'URL est valide
         }
       } else if (url.includes("youtube.com") || url.includes("youtu.be")) {
         platform = "youtube";
@@ -143,9 +150,23 @@ async function processDownload(downloadId: string, url: string, format: string) 
       progress: 10
     });
 
-    // Get video info
-    const info = await ytdl.getBasicInfo(url);
-    const title = info.videoDetails.title.replace(/[^\w\s-]/gi, ''); // Clean filename
+    // Get video info with better error handling
+    let info;
+    let title = "video";
+    
+    try {
+      info = await ytdl.getBasicInfo(url, {
+        requestOptions: {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          }
+        }
+      });
+      title = info.videoDetails.title.replace(/[^\w\s-]/gi, ''); // Clean filename
+    } catch (error) {
+      console.error("Error getting video info:", error);
+      throw new Error("Impossible d'obtenir les informations de la vidéo. L'URL pourrait être invalide ou la vidéo indisponible.");
+    }
 
     await storage.updateDownload(downloadId, { 
       title,
@@ -164,21 +185,40 @@ async function processDownload(downloadId: string, url: string, format: string) 
 
     await storage.updateDownload(downloadId, { progress: 40 });
 
-    // Download video/audio
-    const stream = ytdl(url, {
+    // Download video/audio with better options
+    const downloadOptions: any = {
       quality: format === "mp3" ? "highestaudio" : "highest",
-      filter: format === "mp3" ? "audioonly" : "audioandvideo"
-    });
+      filter: format === "mp3" ? "audioonly" : "audioandvideo",
+      requestOptions: {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      }
+    };
+    
+    let stream;
+    try {
+      stream = ytdl(url, downloadOptions);
+    } catch (error) {
+      console.error("Error creating download stream:", error);
+      throw new Error("Erreur lors de la création du flux de téléchargement. Veuillez réessayer.");
+    }
 
     const writeStream = fs.createWriteStream(filePath);
     stream.pipe(writeStream);
 
-    let downloadedBytes = 0;
-    const totalBytes = parseInt(info.videoDetails.lengthSeconds) * 1000000; // Rough estimate
-
+    // Progress tracking
     stream.on('progress', (chunkLength: number, downloaded: number, total: number) => {
-      const progress = Math.min(90, 40 + Math.floor((downloaded / total) * 40));
-      storage.updateDownload(downloadId, { progress });
+      if (total > 0) {
+        const progress = Math.min(90, 40 + Math.floor((downloaded / total) * 40));
+        storage.updateDownload(downloadId, { progress });
+      }
+    });
+    
+    // Error handling for stream
+    stream.on('error', (error) => {
+      console.error('Stream error:', error);
+      throw error;
     });
 
     await new Promise((resolve, reject) => {
@@ -206,9 +246,24 @@ async function processDownload(downloadId: string, url: string, format: string) 
 
   } catch (error) {
     console.error("Processing error:", error);
+    
+    let errorMessage = "Une erreur inconnue s'est produite";
+    
+    if (error instanceof Error) {
+      if (error.message.includes('Could not extract functions')) {
+        errorMessage = "Erreur YouTube: La vidéo pourrait être protégée ou l'URL invalide. Veuillez réessayer.";
+      } else if (error.message.includes('Video unavailable')) {
+        errorMessage = "Cette vidéo n'est pas disponible pour le téléchargement.";
+      } else if (error.message.includes('private')) {
+        errorMessage = "Cette vidéo est privée et ne peut pas être téléchargée.";
+      } else {
+        errorMessage = error.message;
+      }
+    }
+    
     await storage.updateDownload(downloadId, {
       status: "failed",
-      error: error instanceof Error ? error.message : "Unknown error occurred"
+      error: errorMessage
     });
   }
 }
