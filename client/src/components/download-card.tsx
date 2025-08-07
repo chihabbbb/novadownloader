@@ -187,7 +187,7 @@ export default function DownloadCard() {
         </div>
 
         {/* Platform Detection Display */}
-        {(validationData && validationData.platform) || url.includes('youtube') && (
+        {(url.includes('youtube') || url.includes('youtu.be') || (validationData && validationData.platform)) && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
