@@ -14,7 +14,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ status: "ok" });
   });
 
-  // Validate YouTube URL
+  // Validate YouTube URL and get available formats
   app.post("/api/validate", async (req, res) => {
     try {
       const { url } = req.body;
@@ -26,6 +26,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isValid = ytdl.validateURL(url);
       let platform = "unknown";
       let title = null;
+      let formats: any[] = [];
+      let thumbnail = null;
+      let duration = null;
 
       if (isValid) {
         platform = "youtube";
@@ -37,10 +40,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             }
           });
+          
           title = info.videoDetails.title;
+          thumbnail = info.videoDetails.thumbnails?.[0]?.url;
+          duration = info.videoDetails.lengthSeconds;
+          
+          // Récupérer les formats disponibles
+          const videoFormats = info.formats
+            .filter(format => format.hasVideo && format.hasAudio)
+            .map(format => ({
+              itag: format.itag,
+              quality: format.qualityLabel || format.quality,
+              container: format.container,
+              hasVideo: format.hasVideo,
+              hasAudio: format.hasAudio,
+              filesize: format.contentLength
+            }))
+            .sort((a, b) => {
+              const qualityOrder = { '1080p': 5, '720p': 4, '480p': 3, '360p': 2, '240p': 1, '144p': 0 };
+              return (qualityOrder[b.quality as keyof typeof qualityOrder] || 0) - (qualityOrder[a.quality as keyof typeof qualityOrder] || 0);
+            });
+            
+          const audioFormats = info.formats
+            .filter(format => format.hasAudio && !format.hasVideo)
+            .map(format => ({
+              itag: format.itag,
+              quality: `Audio ${format.audioBitrate || 'Unknown'}kbps`,
+              container: format.container,
+              hasVideo: false,
+              hasAudio: true,
+              filesize: format.contentLength
+            }))
+            .sort((a, b) => {
+              const aBitrate = parseInt(a.quality.match(/\d+/)?.[0] || '0');
+              const bBitrate = parseInt(b.quality.match(/\d+/)?.[0] || '0');
+              return bBitrate - aBitrate;
+            });
+            
+          formats = [
+            ...videoFormats.slice(0, 6), // Top 6 video qualities
+            ...audioFormats.slice(0, 3)  // Top 3 audio qualities
+          ];
+          
         } catch (error) {
           console.error("Error getting video info:", error);
-          // Même si on ne peut pas obtenir le titre, on indique que l'URL est valide
+          // Même si on ne peut pas obtenir les détails, on indique que l'URL est valide
         }
       } else if (url.includes("youtube.com") || url.includes("youtu.be")) {
         platform = "youtube";
@@ -50,6 +94,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isValid,
         platform,
         title,
+        thumbnail,
+        duration,
+        formats,
         supported: platform === "youtube"
       });
     } catch (error) {
@@ -62,7 +109,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/download", async (req, res) => {
     try {
       const validatedData = downloadRequestSchema.parse(req.body);
-      const { url, format } = validatedData;
+      const { url, format, quality, itag } = validatedData;
 
       // Validate YouTube URL
       if (!ytdl.validateURL(url)) {
@@ -76,11 +123,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const download = await storage.createDownload({
         url,
         platform,
-        format
+        format,
+        quality,
+        itag
       });
 
       // Start processing in background
-      processDownload(download.id, url, format);
+      processDownload(download.id, url, format, quality, itag);
 
       res.json({ downloadId: download.id });
     } catch (error) {
@@ -142,7 +191,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   return httpServer;
 }
 
-async function processDownload(downloadId: string, url: string, format: string) {
+async function processDownload(downloadId: string, url: string, format: string, quality?: string, itag?: number) {
   try {
     // Update status to processing
     await storage.updateDownload(downloadId, { 
@@ -187,7 +236,7 @@ async function processDownload(downloadId: string, url: string, format: string) 
 
     // Download video/audio with better options
     const downloadOptions: any = {
-      quality: format === "mp3" ? "highestaudio" : "highest",
+      quality: itag ? itag : (format === "mp3" ? "highestaudio" : "highest"),
       filter: format === "mp3" ? "audioonly" : "audioandvideo",
       requestOptions: {
         headers: {

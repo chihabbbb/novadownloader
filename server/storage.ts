@@ -26,6 +26,8 @@ export class MemStorage implements IStorage {
       downloadUrl: null,
       error: null,
       createdAt: new Date(),
+      quality: insertDownload.quality || null,
+      itag: insertDownload.itag || null,
     };
     this.downloads.set(id, download);
     return download;

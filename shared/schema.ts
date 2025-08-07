@@ -8,6 +8,8 @@ export const downloads = pgTable("downloads", {
   url: text("url").notNull(),
   platform: text("platform").notNull(),
   format: text("format").notNull(), // mp4, mp3
+  quality: text("quality"), // selected quality
+  itag: integer("itag"), // YouTube format tag
   title: text("title"),
   status: text("status").notNull().default("pending"), // pending, processing, completed, failed
   progress: integer("progress").default(0),
@@ -20,6 +22,8 @@ export const insertDownloadSchema = createInsertSchema(downloads).pick({
   url: true,
   platform: true,
   format: true,
+  quality: true,
+  itag: true,
 });
 
 export const downloadRequestSchema = z.object({
@@ -27,6 +31,8 @@ export const downloadRequestSchema = z.object({
   format: z.enum(["mp4", "mp3"], {
     required_error: "Please select a format",
   }),
+  quality: z.string().optional(),
+  itag: z.number().optional(),
 });
 
 export type InsertDownload = z.infer<typeof insertDownloadSchema>;

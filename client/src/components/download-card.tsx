@@ -2,18 +2,22 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Link, Video, Music, Rocket, Sparkles, Download } from "lucide-react";
-import { motion } from "framer-motion";
+import { Link, Video, Music, Rocket, Sparkles, Download, RefreshCw, PlayCircle } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import type { Download as DownloadType } from "@shared/schema";
 
 export default function DownloadCard() {
   const [url, setUrl] = useState("");
   const [format, setFormat] = useState<"mp4" | "mp3">("mp4");
+  const [selectedQuality, setSelectedQuality] = useState<string>("");
+  const [selectedItag, setSelectedItag] = useState<number | null>(null);
   const [downloadId, setDownloadId] = useState<string | null>(null);
   const [validationData, setValidationData] = useState<any>(null);
+  const [previousUrl, setPreviousUrl] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -30,8 +34,8 @@ export default function DownloadCard() {
 
   // Start download
   const downloadMutation = useMutation({
-    mutationFn: async ({ url, format }: { url: string; format: string }) => {
-      const res = await apiRequest("POST", "/api/download", { url, format });
+    mutationFn: async ({ url, format, quality, itag }: { url: string; format: string; quality?: string; itag?: number }) => {
+      const res = await apiRequest("POST", "/api/download", { url, format, quality, itag });
       return res.json();
     },
     onSuccess: (data) => {
@@ -57,16 +61,25 @@ export default function DownloadCard() {
     refetchInterval: downloadId ? 2000 : false,
   });
 
+  // Reset state when URL changes significantly
   useEffect(() => {
-    if (url && url.length > 10) {
+    if (url !== previousUrl && url.length > 10) {
+      // Reset all states for new URL
+      setDownloadId(null);
+      setSelectedQuality("");
+      setSelectedItag(null);
+      setValidationData(null);
+      
       const timer = setTimeout(() => {
         validateMutation.mutate(url);
       }, 500);
+      setPreviousUrl(url);
       return () => clearTimeout(timer);
-    } else {
+    } else if (url.length <= 10) {
       setValidationData(null);
+      setDownloadId(null);
     }
-  }, [url]);
+  }, [url, previousUrl]);
 
   useEffect(() => {
     if (downloadStatus?.status === "completed") {
@@ -102,7 +115,12 @@ export default function DownloadCard() {
       return;
     }
 
-    downloadMutation.mutate({ url, format });
+    downloadMutation.mutate({ 
+      url, 
+      format, 
+      quality: selectedQuality || undefined,
+      itag: selectedItag || undefined
+    });
   };
 
   const handleFileDownload = () => {
@@ -155,23 +173,89 @@ export default function DownloadCard() {
             animate={{ opacity: 1, scale: 1 }}
             className="mb-8"
           >
-            <div className="flex items-center justify-center space-x-4 p-4 glass rounded-lg">
-              <div className="flex items-center space-x-2">
-                {validationData.platform === "youtube" && (
-                  <div className="w-6 h-6 bg-red-500 rounded flex items-center justify-center">
-                    <span className="text-white text-xs font-bold">Y</span>
+            <div className="glass rounded-lg p-6 border border-white/20">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-3">
+                  {validationData.platform === "youtube" && (
+                    <div className="w-8 h-8 bg-red-500 rounded-lg flex items-center justify-center">
+                      <PlayCircle className="text-white" size={16} />
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-white font-medium text-lg">
+                      {validationData.platform.charAt(0).toUpperCase() + validationData.platform.slice(1)}
+                    </span>
+                    <div className={`flex items-center space-x-2 mt-1`}>
+                      <div className={`w-2 h-2 rounded-full ${
+                        validationData.supported ? "bg-green-400 animate-pulse" : "bg-red-400"
+                      }`}></div>
+                      <span className={`text-xs ${
+                        validationData.supported ? "text-green-400" : "text-red-400"
+                      }`}>
+                        {validationData.supported ? "Supported" : "Not supported"}
+                      </span>
+                    </div>
                   </div>
-                )}
-                <span className="text-white font-medium">
-                  {validationData.platform.charAt(0).toUpperCase() + validationData.platform.slice(1)} detected
-                </span>
-                {validationData.title && (
-                  <span className="text-gray-400 text-sm">- {validationData.title}</span>
-                )}
+                </div>
+                
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setDownloadId(null);
+                    validateMutation.mutate(url);
+                  }}
+                  data-testid="button-refresh-validation"
+                  className="text-gray-400 hover:text-nova-cyan"
+                >
+                  <RefreshCw size={16} />
+                </Button>
               </div>
-              <div className={`w-2 h-2 rounded-full animate-pulse ${
-                validationData.supported ? "bg-green-400" : "bg-red-400"
-              }`}></div>
+              
+              {validationData.title && (
+                <div className="mb-4">
+                  <h4 className="text-white font-medium mb-2">{validationData.title}</h4>
+                  {validationData.duration && (
+                    <p className="text-gray-400 text-sm">
+                      Duration: {Math.floor(parseInt(validationData.duration) / 60)}:{(parseInt(validationData.duration) % 60).toString().padStart(2, '0')}
+                    </p>
+                  )}
+                </div>
+              )}
+              
+              {/* Quality Selection */}
+              {validationData.formats && validationData.formats.length > 0 && (
+                <div className="mt-4">
+                  <Label className="text-white text-sm font-medium mb-3 block">
+                    Select Quality:
+                  </Label>
+                  <Select value={selectedQuality} onValueChange={(value) => {
+                    setSelectedQuality(value);
+                    const selectedFormat = validationData.formats.find((f: any) => `${f.quality}-${f.itag}` === value);
+                    setSelectedItag(selectedFormat?.itag || null);
+                  }}>
+                    <SelectTrigger className="w-full bg-white/5 border-white/30 text-white" data-testid="select-quality">
+                      <SelectValue placeholder="Choose quality..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-space-gray border-white/20">
+                      {validationData.formats.map((fmt: any) => (
+                        <SelectItem 
+                          key={fmt.itag} 
+                          value={`${fmt.quality}-${fmt.itag}`}
+                          className="text-white hover:bg-white/10"
+                        >
+                          <div className="flex items-center justify-between w-full">
+                            <span>{fmt.quality}</span>
+                            <span className="text-xs text-gray-400 ml-2">
+                              {fmt.container} {fmt.hasVideo ? '📹' : '🎵'}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
@@ -228,13 +312,17 @@ export default function DownloadCard() {
           {!downloadId && (
             <Button
               onClick={handleDownload}
-              disabled={downloadMutation.isPending || !url}
+              disabled={downloadMutation.isPending || !url || (validationData?.formats?.length > 0 && !selectedQuality)}
               data-testid="button-start-download"
-              className="group relative px-12 py-4 bg-gradient-to-r from-nova-purple via-nova-blue to-nova-cyan hover:from-nova-cyan hover:via-nova-pink hover:to-nova-purple text-white font-semibold rounded-xl transition-all duration-500 transform hover:scale-105 shadow-lg hover:shadow-nova-purple/25"
+              className="group relative px-12 py-4 bg-gradient-to-r from-nova-purple via-nova-blue to-nova-cyan hover:from-nova-cyan hover:via-nova-pink hover:to-nova-purple text-white font-semibold rounded-xl transition-all duration-500 transform hover:scale-105 shadow-lg hover:shadow-nova-purple/25 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
             >
               <span className="relative z-10 flex items-center justify-center space-x-2">
                 <Rocket size={20} />
-                <span>{downloadMutation.isPending ? "Processing..." : "Start Download"}</span>
+                <span>
+                  {downloadMutation.isPending ? "Processing..." : 
+                   (validationData?.formats?.length > 0 && !selectedQuality) ? "Select Quality First" :
+                   "Start Download"}
+                </span>
               </span>
               <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-nova-purple via-nova-blue to-nova-cyan opacity-0 group-hover:opacity-100 blur transition-opacity duration-500"></div>
             </Button>
