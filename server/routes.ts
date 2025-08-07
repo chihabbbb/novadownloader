@@ -167,32 +167,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Download file
+  // Stream file directly (no storage)
   app.get("/api/file/:id", async (req, res) => {
     try {
       const { id } = req.params;
       const download = await storage.getDownload(id);
 
-      if (!download || download.status !== "completed" || !download.downloadUrl) {
-        return res.status(404).json({ error: "File not found" });
+      if (!download || download.status !== "completed") {
+        return res.status(404).json({ error: "Download not ready" });
       }
 
-      const filePath = download.downloadUrl;
-      if (!fs.existsSync(filePath)) {
-        return res.status(404).json({ error: "File not found on disk" });
+      const { url, format, quality, itag } = download;
+      
+      // Validate YouTube URL
+      if (!ytdl.validateURL(url)) {
+        return res.status(400).json({ error: "Invalid YouTube URL" });
       }
 
-      const ext = download.format === "mp3" ? "mp3" : "mp4";
+      const ext = format === "mp3" ? "mp3" : "mp4";
       const filename = `${download.title || "download"}.${ext}`;
       
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-      res.setHeader('Content-Type', download.format === "mp3" ? "audio/mpeg" : "video/mp4");
+      res.setHeader('Content-Type', format === "mp3" ? "audio/mpeg" : "video/mp4");
       
-      const fileStream = fs.createReadStream(filePath);
-      fileStream.pipe(res);
+      // Stream directly from YouTube without saving to disk
+      let downloadOptions: any;
+      
+      if (format === "mp3" || (quality && quality.includes('Audio'))) {
+        downloadOptions = {
+          quality: "highestaudio",
+          filter: "audioonly",
+          requestOptions: {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+          }
+        };
+      } else {
+        downloadOptions = {
+          quality: itag ? itag : "highest",
+          filter: "audioandvideo",
+          requestOptions: {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+          }
+        };
+      }
+      
+      const stream = ytdl(url, downloadOptions);
+      stream.pipe(res);
+      
+      stream.on('error', (error) => {
+        console.error('Stream error:', error);
+        if (!res.headersSent) {
+          res.status(500).json({ error: "Failed to stream file" });
+        }
+      });
+      
     } catch (error) {
       console.error("File download error:", error);
-      res.status(500).json({ error: "Failed to download file" });
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Failed to download file" });
+      }
     }
   });
 
@@ -226,28 +263,10 @@ async function processDownload(downloadId: string, url: string, format: string, 
       throw new Error("Impossible d'obtenir les informations de la vidéo. L'URL pourrait être invalide ou la vidéo indisponible.");
     }
 
-    await storage.updateDownload(downloadId, { 
-      title,
-      progress: 25
-    });
-
-    // Create downloads directory if it doesn't exist
-    const downloadsDir = path.join(process.cwd(), 'downloads');
-    if (!fs.existsSync(downloadsDir)) {
-      fs.mkdirSync(downloadsDir, { recursive: true });
-    }
-
-    const fileId = randomUUID();
-    const filename = `${fileId}.${format === "mp3" ? "mp4" : format}`; // Download as mp4 first for audio extraction
-    const filePath = path.join(downloadsDir, filename);
-
-    await storage.updateDownload(downloadId, { progress: 40 });
-
-    // Download video/audio with better options
+    // Just validate the stream can be created, but don't download
     let downloadOptions: any;
     
     if (format === "mp3" || (quality && quality.includes('Audio'))) {
-      // Pour l'audio MP3
       downloadOptions = {
         quality: "highestaudio",
         filter: "audioonly",
@@ -258,7 +277,6 @@ async function processDownload(downloadId: string, url: string, format: string, 
         }
       };
     } else {
-      // Pour la vidéo avec qualité spécifique
       downloadOptions = {
         quality: itag ? itag : "highest",
         filter: "audioandvideo",
@@ -270,87 +288,26 @@ async function processDownload(downloadId: string, url: string, format: string, 
       };
     }
     
-    console.log('Options de téléchargement:', downloadOptions);
+    console.log('Validation des options de téléchargement:', downloadOptions);
     
-    let stream;
+    // Test stream creation without downloading
     try {
-      stream = ytdl(url, downloadOptions);
+      const testStream = ytdl(url, downloadOptions);
+      testStream.destroy(); // Close immediately
     } catch (error) {
       console.error("Error creating download stream:", error);
-      throw new Error("Erreur lors de la création du flux de téléchargement. Veuillez réessayer.");
+      throw new Error("Erreur lors de la validation du flux de téléchargement. Veuillez réessayer.");
     }
 
-    const writeStream = fs.createWriteStream(filePath);
-    stream.pipe(writeStream);
-
-    // Progress tracking
-    stream.on('progress', (chunkLength: number, downloaded: number, total: number) => {
-      if (total > 0) {
-        const progress = Math.min(90, 40 + Math.floor((downloaded / total) * 40));
-        storage.updateDownload(downloadId, { progress });
-      }
-    });
-    
-    // Error handling for stream
-    stream.on('error', (error) => {
-      console.error('Stream error:', error);
-      throw error;
-    });
-
-    await new Promise((resolve, reject) => {
-      writeStream.on('finish', resolve);
-      writeStream.on('error', reject);
-      stream.on('error', reject);
-    });
-
-    let finalPath = filePath;
-
-    // Convert to MP3 using FFmpeg if needed
-    if (format === "mp3" || (quality && quality.includes('Audio'))) {
-      const mp3Path = path.join(downloadsDir, `${fileId}.mp3`);
-      
-      try {
-        await storage.updateDownload(downloadId, { progress: 95 });
-        
-        // Use FFmpeg to convert to MP3
-        await new Promise((resolve, reject) => {
-          const ffmpeg = spawn('ffmpeg', [
-            '-i', filePath,
-            '-vn', // No video
-            '-acodec', 'mp3',
-            '-ab', '192k', // Audio bitrate
-            '-ar', '44100', // Audio sample rate
-            '-y', // Overwrite output file
-            mp3Path
-          ]);
-          
-          ffmpeg.on('close', (code) => {
-            if (code === 0) {
-              // Delete original file after successful conversion
-              fs.unlinkSync(filePath);
-              resolve(mp3Path);
-            } else {
-              reject(new Error(`FFmpeg conversion failed with code ${code}`));
-            }
-          });
-          
-          ffmpeg.on('error', reject);
-        });
-        
-        finalPath = mp3Path;
-      } catch (conversionError) {
-        console.error('MP3 conversion error:', conversionError);
-        // Fallback: just rename the file
-        const mp3Path = path.join(downloadsDir, `${fileId}.mp3`);
-        fs.renameSync(filePath, mp3Path);
-        finalPath = mp3Path;
-      }
-    }
-
+    // Mark as completed - file will be streamed directly when requested
     await storage.updateDownload(downloadId, {
       status: "completed",
       progress: 100,
-      downloadUrl: finalPath
+      title,
+      url, // Store URL for direct streaming
+      format,
+      quality,
+      itag
     });
 
   } catch (error) {
