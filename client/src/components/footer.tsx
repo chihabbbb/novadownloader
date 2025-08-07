@@ -1,8 +1,15 @@
 import { Download } from "lucide-react";
+import { AdSenseResponsiveBanner } from "@/components/adsense-banner";
+import { getAdSlot } from "@/config/adsense";
 
 export default function Footer() {
   return (
     <footer className="border-t border-white/10 backdrop-blur-xl bg-white/5 mt-24" id="support">
+      {/* Zone publicitaire avant le footer */}
+      <div className="container mx-auto px-6 py-8">
+        <AdSenseResponsiveBanner adSlot={getAdSlot('FOOTER_BANNER')} className="mb-8" />
+      </div>
+      
       <div className="container mx-auto px-6 py-12">
         <div className="grid md:grid-cols-3 gap-8 text-center md:text-left">
           <div>
