@@ -45,17 +45,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
           thumbnail = info.videoDetails.thumbnails?.[0]?.url;
           duration = info.videoDetails.lengthSeconds;
           
-          // Récupérer les formats vidéo disponibles
+          console.log('Info formats bruts:', info.formats.length, 'formats trouvés');
+          
+          // Formats vidéo avec audio
           const videoFormats = info.formats
-            .filter(format => format.hasVideo && format.hasAudio && format.qualityLabel)
+            .filter(format => {
+              const hasVideo = format.hasVideo;
+              const hasAudio = format.hasAudio; 
+              const hasQuality = format.qualityLabel;
+              console.log(`Format itag=${format.itag}: video=${hasVideo}, audio=${hasAudio}, quality=${format.qualityLabel}`);
+              return hasVideo && hasAudio && hasQuality;
+            })
             .map(format => ({
               itag: format.itag,
               quality: format.qualityLabel,
-              container: format.container,
+              container: format.container || 'mp4',
               type: 'video'
-            }))
+            }));
+            
+          console.log('Formats vidéo trouvés:', videoFormats);
+          
+          // Supprimer les doublons et trier
+          const uniqueVideoFormats = videoFormats
             .filter((format, index, self) => 
-              // Supprimer les doublons basés sur la qualité
               index === self.findIndex(f => f.quality === format.quality)
             )
             .sort((a, b) => {
@@ -65,7 +77,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               return (qualityOrder[b.quality] || 0) - (qualityOrder[a.quality] || 0);
             });
             
-          // Formats audio seulement
+          // Ajouter formats audio
           const audioFormats = [{
             itag: 'audio',
             quality: 'Audio MP3',
@@ -73,9 +85,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             type: 'audio'
           }];
             
-          formats = [...videoFormats, ...audioFormats];
+          formats = [...uniqueVideoFormats, ...audioFormats];
           
-          console.log('Formats disponibles:', formats);
+          console.log('Formats finaux envoyés:', formats);
           
         } catch (error) {
           console.error("Error getting video info:", error);

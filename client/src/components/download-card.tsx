@@ -29,6 +29,17 @@ export default function DownloadCard() {
     },
     onSuccess: (data) => {
       console.log('Données de validation reçues:', data);
+      
+      // Si pas de formats, ajouter des formats par défaut
+      if (data.supported && (!data.formats || data.formats.length === 0)) {
+        data.formats = [
+          { itag: 22, quality: '720p', container: 'mp4', type: 'video' },
+          { itag: 18, quality: '360p', container: 'mp4', type: 'video' },
+          { itag: 'audio', quality: 'Audio MP3', container: 'mp3', type: 'audio' }
+        ];
+        console.log('Formats par défaut ajoutés:', data.formats);
+      }
+      
       setValidationData(data);
     },
     onError: (error) => {
@@ -254,42 +265,65 @@ export default function DownloadCard() {
                 </div>
               )}
               
-              {/* Debug info */}
-              <div className="text-xs text-gray-500 mb-2">
-                Formats trouvés: {validationData.formats?.length || 0}
+              {/* Debug info - visible pendant les tests */}
+              <div className="text-xs text-gray-500 mb-2 p-2 bg-black/20 rounded">
+                🔍 Debug: {validationData.formats?.length || 0} formats trouvés
+                {validationData.formats?.length > 0 && (
+                  <div className="mt-1">
+                    {validationData.formats.map((f: any, i: number) => (
+                      <div key={i} className="text-xs">
+                        {f.quality} ({f.type}) - itag: {f.itag}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               
-              {/* Quality Selection */}
-              {validationData.formats && validationData.formats.length > 0 && (
+              {/* Quality Selection - toujours afficher si vidéo supportée */}
+              {validationData.supported && (
                 <div className="mt-4 p-4 bg-white/5 rounded-lg border border-white/20">
                   <Label className="text-white text-sm font-medium mb-3 block">
                     🎥 Choisir la qualité:
                   </Label>
-                  <div className="grid gap-2">
-                    {validationData.formats.map((fmt: any) => (
-                      <button
-                        key={fmt.itag}
-                        onClick={() => {
-                          const value = `${fmt.quality}-${fmt.itag}`;
-                          setSelectedQuality(value);
-                          setSelectedItag(fmt.itag === 'audio' ? null : fmt.itag);
-                        }}
-                        className={`p-3 rounded-lg border transition-all duration-200 text-left ${
-                          selectedQuality === `${fmt.quality}-${fmt.itag}`
-                            ? 'border-nova-purple bg-nova-purple/20 text-white'
-                            : 'border-white/20 bg-white/5 text-gray-300 hover:bg-white/10 hover:border-nova-cyan/50'
-                        }`}
-                        data-testid={`quality-${fmt.quality.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
+                  
+                  {validationData.formats && validationData.formats.length > 0 ? (
+                    <div className="grid gap-2">
+                      {validationData.formats.map((fmt: any) => (
+                        <button
+                          key={fmt.itag}
+                          onClick={() => {
+                            const value = `${fmt.quality}-${fmt.itag}`;
+                            setSelectedQuality(value);
+                            setSelectedItag(fmt.itag === 'audio' ? null : fmt.itag);
+                          }}
+                          className={`p-3 rounded-lg border transition-all duration-200 text-left ${
+                            selectedQuality === `${fmt.quality}-${fmt.itag}`
+                              ? 'border-nova-purple bg-nova-purple/20 text-white'
+                              : 'border-white/20 bg-white/5 text-gray-300 hover:bg-white/10 hover:border-nova-cyan/50'
+                          }`}
+                          data-testid={`quality-${fmt.quality.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">{fmt.quality}</span>
+                            <span className="text-xs opacity-70">
+                              {fmt.type === 'video' ? '📹 Vidéo' : '🎵 Audio'} • {fmt.container}
+                            </span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4">
+                      <div className="animate-spin w-6 h-6 border-2 border-nova-cyan border-t-transparent rounded-full mx-auto mb-2"></div>
+                      <p className="text-gray-400 text-sm">Chargement des qualités...</p>
+                      <button 
+                        onClick={() => validateMutation.mutate(url)}
+                        className="mt-2 text-nova-cyan hover:text-nova-purple text-sm underline"
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">{fmt.quality}</span>
-                          <span className="text-xs opacity-70">
-                            {fmt.type === 'video' ? '📹 Vidéo' : '🎵 Audio'} • {fmt.container}
-                          </span>
-                        </div>
+                        Réessayer
                       </button>
-                    ))}
-                  </div>
+                    </div>
+                  )}
                   
                   {selectedQuality && (
                     <div className="mt-3 p-2 bg-green-500/20 border border-green-500/50 rounded text-green-400 text-sm">
