@@ -207,7 +207,7 @@ export default function DownloadCard() {
                     </span>
                     <div className={`flex items-center space-x-2 mt-1`}>
                       <div className={`w-2 h-2 rounded-full ${
-                        validationData.supported ? "bg-green-400 animate-pulse" : "bg-red-400"
+                        validationData?.supported ? "bg-green-400 animate-pulse" : "bg-red-400"
                       }`}></div>
                       <span className={`text-xs ${
                         (validationData?.supported !== false) ? "text-green-400" : "text-red-400"
