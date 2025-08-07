@@ -45,42 +45,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
           thumbnail = info.videoDetails.thumbnails?.[0]?.url;
           duration = info.videoDetails.lengthSeconds;
           
-          // Récupérer les formats disponibles
+          // Récupérer les formats vidéo disponibles
           const videoFormats = info.formats
-            .filter(format => format.hasVideo && format.hasAudio)
+            .filter(format => format.hasVideo && format.hasAudio && format.qualityLabel)
             .map(format => ({
               itag: format.itag,
-              quality: format.qualityLabel || format.quality,
+              quality: format.qualityLabel,
               container: format.container,
-              hasVideo: format.hasVideo,
-              hasAudio: format.hasAudio,
-              filesize: format.contentLength
+              type: 'video'
             }))
+            .filter((format, index, self) => 
+              // Supprimer les doublons basés sur la qualité
+              index === self.findIndex(f => f.quality === format.quality)
+            )
             .sort((a, b) => {
-              const qualityOrder = { '1080p': 5, '720p': 4, '480p': 3, '360p': 2, '240p': 1, '144p': 0 };
-              return (qualityOrder[b.quality as keyof typeof qualityOrder] || 0) - (qualityOrder[a.quality as keyof typeof qualityOrder] || 0);
+              const qualityOrder: { [key: string]: number } = { 
+                '1080p': 5, '720p': 4, '480p': 3, '360p': 2, '240p': 1, '144p': 0 
+              };
+              return (qualityOrder[b.quality] || 0) - (qualityOrder[a.quality] || 0);
             });
             
-          const audioFormats = info.formats
-            .filter(format => format.hasAudio && !format.hasVideo)
-            .map(format => ({
-              itag: format.itag,
-              quality: `Audio ${format.audioBitrate || 'Unknown'}kbps`,
-              container: format.container,
-              hasVideo: false,
-              hasAudio: true,
-              filesize: format.contentLength
-            }))
-            .sort((a, b) => {
-              const aBitrate = parseInt(a.quality.match(/\d+/)?.[0] || '0');
-              const bBitrate = parseInt(b.quality.match(/\d+/)?.[0] || '0');
-              return bBitrate - aBitrate;
-            });
+          // Formats audio seulement
+          const audioFormats = [{
+            itag: 'audio',
+            quality: 'Audio MP3',
+            container: 'mp3',
+            type: 'audio'
+          }];
             
-          formats = [
-            ...videoFormats.slice(0, 6), // Top 6 video qualities
-            ...audioFormats.slice(0, 3)  // Top 3 audio qualities
-          ];
+          formats = [...videoFormats, ...audioFormats];
+          
+          console.log('Formats disponibles:', formats);
           
         } catch (error) {
           console.error("Error getting video info:", error);
@@ -235,15 +230,33 @@ async function processDownload(downloadId: string, url: string, format: string, 
     await storage.updateDownload(downloadId, { progress: 40 });
 
     // Download video/audio with better options
-    const downloadOptions: any = {
-      quality: itag ? itag : (format === "mp3" ? "highestaudio" : "highest"),
-      filter: format === "mp3" ? "audioonly" : "audioandvideo",
-      requestOptions: {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    let downloadOptions: any;
+    
+    if (format === "mp3" || (quality && quality.includes('Audio'))) {
+      // Pour l'audio MP3
+      downloadOptions = {
+        quality: "highestaudio",
+        filter: "audioonly",
+        requestOptions: {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          }
         }
-      }
-    };
+      };
+    } else {
+      // Pour la vidéo avec qualité spécifique
+      downloadOptions = {
+        quality: itag ? itag : "highest",
+        filter: "audioandvideo",
+        requestOptions: {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          }
+        }
+      };
+    }
+    
+    console.log('Options de téléchargement:', downloadOptions);
     
     let stream;
     try {

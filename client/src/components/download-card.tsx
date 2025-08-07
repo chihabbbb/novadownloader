@@ -28,7 +28,16 @@ export default function DownloadCard() {
       return res.json();
     },
     onSuccess: (data) => {
+      console.log('Données de validation reçues:', data);
       setValidationData(data);
+    },
+    onError: (error) => {
+      console.error('Erreur de validation:', error);
+      toast({
+        title: "Erreur de validation",
+        description: "Impossible de valider l'URL",
+        variant: "destructive",
+      });
     },
   });
 
@@ -192,68 +201,101 @@ export default function DownloadCard() {
                       <span className={`text-xs ${
                         validationData.supported ? "text-green-400" : "text-red-400"
                       }`}>
-                        {validationData.supported ? "Supported" : "Not supported"}
+                        {validationData.supported ? "Supporté" : "Non supporté"}
                       </span>
                     </div>
                   </div>
                 </div>
                 
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setDownloadId(null);
-                    validateMutation.mutate(url);
-                  }}
-                  data-testid="button-refresh-validation"
-                  className="text-gray-400 hover:text-nova-cyan"
-                >
-                  <RefreshCw size={16} />
-                </Button>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setDownloadId(null);
+                      validateMutation.mutate(url);
+                    }}
+                    data-testid="button-refresh-validation"
+                    className="text-gray-400 hover:text-nova-cyan"
+                  >
+                    <RefreshCw size={16} />
+                  </Button>
+                  
+                  {downloadId && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setDownloadId(null);
+                        setSelectedQuality("");
+                        setSelectedItag(null);
+                        toast({
+                          title: "Téléchargement annulé",
+                          description: "Vous pouvez maintenant commencer un nouveau téléchargement",
+                        });
+                      }}
+                      data-testid="button-cancel-download"
+                      className="text-red-400 hover:text-red-300"
+                    >
+                      ❌
+                    </Button>
+                  )}
+                </div>
               </div>
               
               {validationData.title && (
                 <div className="mb-4">
-                  <h4 className="text-white font-medium mb-2">{validationData.title}</h4>
+                  <h4 className="text-white font-medium mb-2 truncate">{validationData.title}</h4>
                   {validationData.duration && (
                     <p className="text-gray-400 text-sm">
-                      Duration: {Math.floor(parseInt(validationData.duration) / 60)}:{(parseInt(validationData.duration) % 60).toString().padStart(2, '0')}
+                      Durée: {Math.floor(parseInt(validationData.duration) / 60)}:{(parseInt(validationData.duration) % 60).toString().padStart(2, '0')}
                     </p>
                   )}
                 </div>
               )}
               
+              {/* Debug info */}
+              <div className="text-xs text-gray-500 mb-2">
+                Formats trouvés: {validationData.formats?.length || 0}
+              </div>
+              
               {/* Quality Selection */}
               {validationData.formats && validationData.formats.length > 0 && (
-                <div className="mt-4">
+                <div className="mt-4 p-4 bg-white/5 rounded-lg border border-white/20">
                   <Label className="text-white text-sm font-medium mb-3 block">
-                    Select Quality:
+                    🎥 Choisir la qualité:
                   </Label>
-                  <Select value={selectedQuality} onValueChange={(value) => {
-                    setSelectedQuality(value);
-                    const selectedFormat = validationData.formats.find((f: any) => `${f.quality}-${f.itag}` === value);
-                    setSelectedItag(selectedFormat?.itag || null);
-                  }}>
-                    <SelectTrigger className="w-full bg-white/5 border-white/30 text-white" data-testid="select-quality">
-                      <SelectValue placeholder="Choose quality..." />
-                    </SelectTrigger>
-                    <SelectContent className="bg-space-gray border-white/20">
-                      {validationData.formats.map((fmt: any) => (
-                        <SelectItem 
-                          key={fmt.itag} 
-                          value={`${fmt.quality}-${fmt.itag}`}
-                          className="text-white hover:bg-white/10"
-                        >
-                          <div className="flex items-center justify-between w-full">
-                            <span>{fmt.quality}</span>
-                            <span className="text-xs text-gray-400 ml-2">
-                              {fmt.container} {fmt.hasVideo ? '📹' : '🎵'}
-                            </span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="grid gap-2">
+                    {validationData.formats.map((fmt: any) => (
+                      <button
+                        key={fmt.itag}
+                        onClick={() => {
+                          const value = `${fmt.quality}-${fmt.itag}`;
+                          setSelectedQuality(value);
+                          setSelectedItag(fmt.itag === 'audio' ? null : fmt.itag);
+                        }}
+                        className={`p-3 rounded-lg border transition-all duration-200 text-left ${
+                          selectedQuality === `${fmt.quality}-${fmt.itag}`
+                            ? 'border-nova-purple bg-nova-purple/20 text-white'
+                            : 'border-white/20 bg-white/5 text-gray-300 hover:bg-white/10 hover:border-nova-cyan/50'
+                        }`}
+                        data-testid={`quality-${fmt.quality.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{fmt.quality}</span>
+                          <span className="text-xs opacity-70">
+                            {fmt.type === 'video' ? '📹 Vidéo' : '🎵 Audio'} • {fmt.container}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  
+                  {selectedQuality && (
+                    <div className="mt-3 p-2 bg-green-500/20 border border-green-500/50 rounded text-green-400 text-sm">
+                      ✓ Qualité sélectionnée: {selectedQuality.split('-')[0]}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
