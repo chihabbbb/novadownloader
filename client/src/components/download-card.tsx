@@ -187,7 +187,7 @@ export default function DownloadCard() {
         </div>
 
         {/* Platform Detection Display */}
-        {(url.includes('youtube') || url.includes('youtu.be') || (validationData && validationData.platform)) && (
+        {(url.includes('youtube') || url.includes('youtu.be') || (validationData?.platform)) && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -256,10 +256,10 @@ export default function DownloadCard() {
               
               {validationData?.title && (
                 <div className="mb-4">
-                  <h4 className="text-white font-medium mb-2 truncate">{validationData.title}</h4>
-                  {validationData.duration && (
+                  <h4 className="text-white font-medium mb-2 truncate">{validationData?.title}</h4>
+                  {validationData?.duration && (
                     <p className="text-gray-400 text-sm">
-                      Durée: {Math.floor(parseInt(validationData.duration) / 60)}:{(parseInt(validationData.duration) % 60).toString().padStart(2, '0')}
+                      Durée: {Math.floor(parseInt(validationData?.duration || "0") / 60)}:{(parseInt(validationData?.duration || "0") % 60).toString().padStart(2, '0')}
                     </p>
                   )}
                 </div>
