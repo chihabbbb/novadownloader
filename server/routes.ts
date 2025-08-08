@@ -233,7 +233,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (itag && typeof itag === 'string' && itag !== 'best') {
           ytDlpOptions.format = itag;
         } else {
-          ytDlpOptions.format = 'best[height<=720]';
+          // Platform-specific format selection
+          if (url.includes("tiktok.com") || url.includes("vm.tiktok.com")) {
+            ytDlpOptions.format = 'best'; // TikTok doesn't support height filtering reliably
+          } else if (url.includes("instagram.com")) {
+            ytDlpOptions.format = 'best'; // Instagram also has limited format options
+          } else if (url.includes("twitter.com") || url.includes("x.com")) {
+            ytDlpOptions.format = 'best'; // Twitter/X has limited formats
+          } else {
+            ytDlpOptions.format = 'best[height<=720]'; // YouTube and others
+          }
         }
       }
       
@@ -326,13 +335,29 @@ async function processDownload(downloadId: string, url: string, format: string, 
     
     console.log('Validation des options de téléchargement:', downloadOptions);
     
-    // Test if yt-dlp can handle this URL
+    // Test if yt-dlp can handle this URL with platform-specific validation
     try {
-      await youtubeDl(url, {
-        listFormats: true,
+      const validateOptions: any = {
         noCheckCertificates: true,
-        noWarnings: true
-      });
+        noWarnings: true,
+        addHeader: ['referer:https://www.google.com/']
+      };
+      
+      // For some platforms, listing formats might fail even if the URL is valid
+      if (url.includes("tiktok.com") || url.includes("vm.tiktok.com") || 
+          url.includes("instagram.com") || url.includes("twitter.com") || url.includes("x.com")) {
+        // For these platforms, just check if we can get basic info instead of listing formats
+        await youtubeDl(url, {
+          ...validateOptions,
+          dumpSingleJson: true
+        });
+      } else {
+        // For YouTube and others, we can safely list formats
+        await youtubeDl(url, {
+          ...validateOptions,
+          listFormats: true
+        });
+      }
     } catch (error) {
       console.error("Error validating URL with yt-dlp:", error);
       throw new Error("Erreur lors de la validation de l'URL. Veuillez réessayer.");
