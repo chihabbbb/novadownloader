@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { downloadRequestSchema } from "@shared/schema";
 import { z } from "zod";
-import ytdl from "@distube/ytdl-core";
+import youtubeDl from "youtube-dl-exec";
 import path from "path";
 import fs from "fs";
 import { randomUUID } from "crypto";
@@ -25,78 +25,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "URL is required" });
       }
 
-      const isValid = ytdl.validateURL(url);
+      // Detect platform
       let platform = "unknown";
       let title = null;
       let formats: any[] = [];
       let thumbnail = null;
       let duration = null;
+      let isValid = false;
+
+      // Detect platform from URL
+      if (url.includes("youtube.com") || url.includes("youtu.be")) {
+        platform = "youtube";
+        isValid = true;
+      } else if (url.includes("tiktok.com") || url.includes("vm.tiktok.com")) {
+        platform = "tiktok";
+        isValid = true;
+      } else if (url.includes("instagram.com")) {
+        platform = "instagram";
+        isValid = true;
+      } else if (url.includes("facebook.com") || url.includes("fb.watch")) {
+        platform = "facebook";
+        isValid = true;
+      } else if (url.includes("twitter.com") || url.includes("x.com")) {
+        platform = "twitter";
+        isValid = true;
+      }
 
       if (isValid) {
-        platform = "youtube";
         try {
-          const info = await ytdl.getBasicInfo(url, {
-            requestOptions: {
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-              }
-            }
+          // Use yt-dlp to get video info for any platform
+          const info = await youtubeDl(url, {
+            dumpSingleJson: true,
+            noCheckCertificates: true,
+            noWarnings: true,
+            preferFreeFormats: true,
+            addHeader: ['referer:https://www.google.com/']
           });
           
-          title = info.videoDetails.title;
-          thumbnail = info.videoDetails.thumbnails?.[0]?.url;
-          duration = info.videoDetails.lengthSeconds;
+          title = (info as any).title;
+          thumbnail = (info as any).thumbnail;
+          duration = (info as any).duration;
           
-          console.log('Info formats bruts:', info.formats.length, 'formats trouvés');
+          console.log('Info extraite pour', platform, ':', { title, duration });
           
-          // Formats vidéo avec audio
-          const videoFormats = info.formats
-            .filter(format => {
-              const hasVideo = format.hasVideo;
-              const hasAudio = format.hasAudio; 
-              const hasQuality = format.qualityLabel;
-              console.log(`Format itag=${format.itag}: video=${hasVideo}, audio=${hasAudio}, quality=${format.qualityLabel}`);
-              return hasVideo && hasAudio && hasQuality;
-            })
-            .map(format => ({
-              itag: format.itag,
-              quality: format.qualityLabel,
-              container: format.container || 'mp4',
-              type: 'video'
-            }));
-            
-          console.log('Formats vidéo trouvés:', videoFormats);
+          // Create standard quality options for all platforms
+          const standardFormats = [
+            { itag: 'best', quality: 'Meilleure qualité', container: 'mp4', type: 'video' },
+            { itag: 'worst[height>=720]', quality: '720p HD', container: 'mp4', type: 'video' },
+            { itag: 'worst[height>=480]', quality: '480p Standard', container: 'mp4', type: 'video' },
+            { itag: 'worst[height>=360]', quality: '360p Rapide', container: 'mp4', type: 'video' },
+            { itag: 'bestaudio', quality: 'Audio MP3', container: 'mp3', type: 'audio' }
+          ];
           
-          // Supprimer les doublons et trier
-          const uniqueVideoFormats = videoFormats
-            .filter((format, index, self) => 
-              index === self.findIndex(f => f.quality === format.quality)
-            )
-            .sort((a, b) => {
-              const qualityOrder: { [key: string]: number } = { 
-                '1080p': 5, '720p': 4, '480p': 3, '360p': 2, '240p': 1, '144p': 0 
-              };
-              return (qualityOrder[b.quality] || 0) - (qualityOrder[a.quality] || 0);
-            });
-            
-          // Ajouter formats audio
-          const audioFormats = [{
-            itag: 'audio',
-            quality: 'Audio MP3',
-            container: 'mp3',
-            type: 'audio'
-          }];
-            
-          formats = [...uniqueVideoFormats, ...audioFormats];
+          formats = standardFormats;
           
-          console.log('Formats finaux envoyés:', formats);
+          console.log('Formats standards créés:', formats);
           
         } catch (error) {
-          console.error("Error getting video info:", error);
-          // Même si on ne peut pas obtenir les détails, on indique que l'URL est valide
+          console.error(`Error getting ${platform} info:`, error);
+          // Create fallback formats even if we can't get detailed info
+          formats = [
+            { itag: 'best', quality: 'Meilleure qualité', container: 'mp4', type: 'video' },
+            { itag: 'bestaudio', quality: 'Audio MP3', container: 'mp3', type: 'audio' }
+          ];
         }
-      } else if (url.includes("youtube.com") || url.includes("youtu.be")) {
-        platform = "youtube";
       }
 
       res.json({
@@ -122,32 +114,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Detect platform
       let platform = "unknown";
-      let errorMessage = "";
       
-      if (ytdl.validateURL(url)) {
+      if (url.includes("youtube.com") || url.includes("youtu.be")) {
         platform = "youtube";
       } else if (url.includes("tiktok.com") || url.includes("vm.tiktok.com")) {
         platform = "tiktok";
-        errorMessage = "TikTok n'est pas encore supporté. Seul YouTube est disponible actuellement.";
       } else if (url.includes("instagram.com")) {
         platform = "instagram";
-        errorMessage = "Instagram n'est pas encore supporté. Seul YouTube est disponible actuellement.";
       } else if (url.includes("facebook.com") || url.includes("fb.watch")) {
         platform = "facebook";
-        errorMessage = "Facebook n'est pas encore supporté. Seul YouTube est disponible actuellement.";
       } else if (url.includes("twitter.com") || url.includes("x.com")) {
         platform = "twitter";
-        errorMessage = "Twitter/X n'est pas encore supporté. Seul YouTube est disponible actuellement.";
       } else {
-        errorMessage = "Cette plateforme n'est pas supportée. Seul YouTube est disponible actuellement.";
-      }
-      
-      // Only allow YouTube for now
-      if (platform !== "youtube") {
         return res.status(400).json({ 
-          error: errorMessage,
+          error: "Cette plateforme n'est pas supportée.",
           platform: platform,
-          supportedPlatforms: ["YouTube"]
+          supportedPlatforms: ["YouTube", "TikTok", "Instagram", "Facebook", "Twitter"]
         });
       }
 
@@ -202,10 +184,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { url, format, quality, itag } = download;
       
-      // Validate YouTube URL
-      if (!ytdl.validateURL(url)) {
-        return res.status(400).json({ error: "Invalid YouTube URL" });
-      }
+      // No need to validate URL for specific platform anymore - yt-dlp handles all platforms
 
       const ext = format === "mp3" ? "mp3" : "mp4";
       const filename = `${download.title || "download"}.${ext}`;
@@ -238,15 +217,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       }
       
-      const stream = ytdl(url, downloadOptions);
-      stream.pipe(res);
+      // Use yt-dlp to download and stream directly
+      const ytDlpOptions: any = {
+        output: '-', // Output to stdout
+        noCheckCertificates: true,
+        noWarnings: true,
+        addHeader: ['referer:https://www.google.com/']
+      };
       
-      stream.on('error', (error) => {
-        console.error('Stream error:', error);
-        if (!res.headersSent) {
-          res.status(500).json({ error: "Failed to stream file" });
+      if (format === "mp3" || (quality && quality.includes('Audio'))) {
+        ytDlpOptions.extractAudio = true;
+        ytDlpOptions.audioFormat = 'mp3';
+        ytDlpOptions.audioQuality = '192';
+      } else {
+        if (itag && typeof itag === 'string' && itag !== 'best') {
+          ytDlpOptions.format = itag;
+        } else {
+          ytDlpOptions.format = 'best[height<=720]';
         }
-      });
+      }
+      
+      try {
+        const stream = youtubeDl.exec(url, ytDlpOptions);
+        stream.stdout?.pipe(res);
+        
+        stream.on('error', (error) => {
+          console.error('yt-dlp stream error:', error);
+          if (!res.headersSent) {
+            res.status(500).json({ error: "Failed to stream file" });
+          }
+        });
+        
+        stream.on('close', (code) => {
+          if (code !== 0) {
+            console.error('yt-dlp exited with code:', code);
+            if (!res.headersSent) {
+              res.status(500).json({ error: "Download failed" });
+            }
+          }
+        });
+      } catch (error) {
+        console.error('Error starting yt-dlp:', error);
+        if (!res.headersSent) {
+          res.status(500).json({ error: "Failed to start download" });
+        }
+      }
       
     } catch (error) {
       console.error("File download error:", error);
@@ -273,14 +288,12 @@ async function processDownload(downloadId: string, url: string, format: string, 
     let title = "video";
     
     try {
-      info = await ytdl.getBasicInfo(url, {
-        requestOptions: {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-          }
-        }
+      info = await youtubeDl(url, {
+        dumpSingleJson: true,
+        noCheckCertificates: true,
+        noWarnings: true
       });
-      title = info.videoDetails.title.replace(/[^\w\s-]/gi, ''); // Clean filename
+      title = (info as any).title.replace(/[^\w\s-]/gi, ''); // Clean filename
     } catch (error) {
       console.error("Error getting video info:", error);
       throw new Error("Impossible d'obtenir les informations de la vidéo. L'URL pourrait être invalide ou la vidéo indisponible.");
@@ -313,13 +326,16 @@ async function processDownload(downloadId: string, url: string, format: string, 
     
     console.log('Validation des options de téléchargement:', downloadOptions);
     
-    // Test stream creation without downloading
+    // Test if yt-dlp can handle this URL
     try {
-      const testStream = ytdl(url, downloadOptions);
-      testStream.destroy(); // Close immediately
+      await youtubeDl(url, {
+        listFormats: true,
+        noCheckCertificates: true,
+        noWarnings: true
+      });
     } catch (error) {
-      console.error("Error creating download stream:", error);
-      throw new Error("Erreur lors de la validation du flux de téléchargement. Veuillez réessayer.");
+      console.error("Error validating URL with yt-dlp:", error);
+      throw new Error("Erreur lors de la validation de l'URL. Veuillez réessayer.");
     }
 
     // Mark as completed - file will be streamed directly when requested

@@ -66,30 +66,9 @@ export default function DownloadCard() {
       });
     },
     onError: (error: any) => {
-      let title = "Download Failed";
-      let description = error.message || "Failed to start download";
-      
-      // Parse error response for better messages
-      if (error.message && error.message.includes("TikTok")) {
-        title = "TikTok Non Supporté";
-        description = "TikTok n'est pas encore supporté. Seul YouTube fonctionne actuellement.";
-      } else if (error.message && error.message.includes("Instagram")) {
-        title = "Instagram Non Supporté";
-        description = "Instagram n'est pas encore supporté. Seul YouTube fonctionne actuellement.";
-      } else if (error.message && error.message.includes("Facebook")) {
-        title = "Facebook Non Supporté";
-        description = "Facebook n'est pas encore supporté. Seul YouTube fonctionne actuellement.";
-      } else if (error.message && error.message.includes("Twitter") || error.message && error.message.includes("X.com")) {
-        title = "Twitter/X Non Supporté";
-        description = "Twitter/X n'est pas encore supporté. Seul YouTube fonctionne actuellement.";
-      } else if (error.message && error.message.includes("plateforme n'est pas supportée")) {
-        title = "Plateforme Non Supportée";
-        description = "Cette plateforme n'est pas supportée. Seul YouTube fonctionne actuellement.";
-      }
-      
       toast({
-        title,
-        description,
+        title: "Download Failed",
+        description: error.message || "Failed to start download",
         variant: "destructive",
       });
     },
@@ -150,7 +129,7 @@ export default function DownloadCard() {
     if (validationData?.supported === false) {
       toast({
         title: "Platform Not Supported",
-        description: "Currently only YouTube is supported",
+        description: "This platform is not supported yet",
         variant: "destructive",
       });
       return;
@@ -208,7 +187,7 @@ export default function DownloadCard() {
         </div>
 
         {/* Platform Detection Display */}
-        {(url.includes('youtube') || url.includes('youtu.be') || (validationData?.platform)) && (
+        {(url.includes('youtube') || url.includes('youtu.be') || url.includes('tiktok') || url.includes('instagram') || url.includes('facebook') || url.includes('twitter') || url.includes('x.com') || (validationData?.platform)) && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -217,14 +196,64 @@ export default function DownloadCard() {
             <div className="glass rounded-lg p-6 border border-white/20">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-3">
-                  {(validationData?.platform === "youtube" || url.includes('youtube') || url.includes('youtu.be')) && (
+                  {validationData?.platform === "youtube" && (
                     <div className="w-8 h-8 bg-red-500 rounded-lg flex items-center justify-center">
                       <PlayCircle className="text-white" size={16} />
                     </div>
                   )}
+                  {validationData?.platform === "tiktok" && (
+                    <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center">
+                      <span className="text-white font-bold text-xs">TT</span>
+                    </div>
+                  )}
+                  {validationData?.platform === "instagram" && (
+                    <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+                      <span className="text-white font-bold text-xs">IG</span>
+                    </div>
+                  )}
+                  {validationData?.platform === "facebook" && (
+                    <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                      <span className="text-white font-bold text-xs">FB</span>
+                    </div>
+                  )}
+                  {validationData?.platform === "twitter" && (
+                    <div className="w-8 h-8 bg-sky-500 rounded-lg flex items-center justify-center">
+                      <span className="text-white font-bold text-xs">X</span>
+                    </div>
+                  )}
+                  {!validationData?.platform && (url.includes('youtube') || url.includes('youtu.be')) && (
+                    <div className="w-8 h-8 bg-red-500 rounded-lg flex items-center justify-center">
+                      <PlayCircle className="text-white" size={16} />
+                    </div>
+                  )}
+                  {!validationData?.platform && url.includes('tiktok') && (
+                    <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center">
+                      <span className="text-white font-bold text-xs">TT</span>
+                    </div>
+                  )}
+                  {!validationData?.platform && url.includes('instagram') && (
+                    <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+                      <span className="text-white font-bold text-xs">IG</span>
+                    </div>
+                  )}
+                  {!validationData?.platform && (url.includes('facebook') || url.includes('fb.watch')) && (
+                    <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                      <span className="text-white font-bold text-xs">FB</span>
+                    </div>
+                  )}
+                  {!validationData?.platform && (url.includes('twitter') || url.includes('x.com')) && (
+                    <div className="w-8 h-8 bg-sky-500 rounded-lg flex items-center justify-center">
+                      <span className="text-white font-bold text-xs">X</span>
+                    </div>
+                  )}
                   <div>
                     <span className="text-white font-medium text-lg">
-                      {validationData?.platform ? validationData.platform.charAt(0).toUpperCase() + validationData.platform.slice(1) : 'YouTube'}
+                      {validationData?.platform ? validationData.platform.charAt(0).toUpperCase() + validationData.platform.slice(1) : 
+                       url.includes('tiktok') ? 'TikTok' :
+                       url.includes('instagram') ? 'Instagram' :
+                       url.includes('facebook') ? 'Facebook' :
+                       url.includes('twitter') || url.includes('x.com') ? 'Twitter/X' :
+                       'YouTube'}
                     </span>
                     <div className={`flex items-center space-x-2 mt-1`}>
                       <div className={`w-2 h-2 rounded-full ${
@@ -286,10 +315,10 @@ export default function DownloadCard() {
                 </div>
               )}
               
-              {!validationData?.title && url.includes('youtube') && (
+              {!validationData?.title && (url.includes('youtube') || url.includes('tiktok') || url.includes('instagram') || url.includes('facebook') || url.includes('twitter') || url.includes('x.com')) && (
                 <div className="mb-4 p-3 bg-blue-500/20 rounded-lg border border-blue-500/50">
                   <p className="text-blue-400 text-sm">
-                    ℹ️ URL YouTube détectée - choisissez une qualité pour télécharger
+                    ℹ️ URL détectée - choisissez une qualité pour télécharger
                   </p>
                 </div>
               )}
