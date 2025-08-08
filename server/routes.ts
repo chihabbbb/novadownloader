@@ -43,7 +43,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else if (url.includes("instagram.com")) {
         platform = "instagram";
         isValid = true;
-      } else if (url.includes("facebook.com") || url.includes("fb.watch")) {
+      } else if (url.includes("facebook.com") || url.includes("fb.watch") || url.includes("web.facebook.com")) {
         platform = "facebook";
         isValid = true;
       } else if (url.includes("twitter.com") || url.includes("x.com")) {
@@ -121,7 +121,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         platform = "tiktok";
       } else if (url.includes("instagram.com")) {
         platform = "instagram";
-      } else if (url.includes("facebook.com") || url.includes("fb.watch")) {
+      } else if (url.includes("facebook.com") || url.includes("fb.watch") || url.includes("web.facebook.com")) {
         platform = "facebook";
       } else if (url.includes("twitter.com") || url.includes("x.com")) {
         platform = "twitter";
@@ -231,7 +231,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ytDlpOptions.audioQuality = '192';
       } else {
         if (itag && typeof itag === 'string' && itag !== 'best') {
-          ytDlpOptions.format = itag;
+          // For Facebook, even custom itags might not work, so fallback to 'best'
+          if (url.includes("facebook.com") || url.includes("fb.watch") || url.includes("web.facebook.com")) {
+            ytDlpOptions.format = 'best';
+          } else {
+            ytDlpOptions.format = itag;
+          }
         } else {
           // Platform-specific format selection
           if (url.includes("tiktok.com") || url.includes("vm.tiktok.com")) {
@@ -240,6 +245,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ytDlpOptions.format = 'best'; // Instagram also has limited format options
           } else if (url.includes("twitter.com") || url.includes("x.com")) {
             ytDlpOptions.format = 'best'; // Twitter/X has limited formats
+          } else if (url.includes("facebook.com") || url.includes("fb.watch") || url.includes("web.facebook.com")) {
+            ytDlpOptions.format = 'best'; // Facebook has very limited format options
           } else {
             ytDlpOptions.format = 'best[height<=720]'; // YouTube and others
           }
@@ -345,7 +352,8 @@ async function processDownload(downloadId: string, url: string, format: string, 
       
       // For some platforms, listing formats might fail even if the URL is valid
       if (url.includes("tiktok.com") || url.includes("vm.tiktok.com") || 
-          url.includes("instagram.com") || url.includes("twitter.com") || url.includes("x.com")) {
+          url.includes("instagram.com") || url.includes("twitter.com") || url.includes("x.com") ||
+          url.includes("facebook.com") || url.includes("fb.watch") || url.includes("web.facebook.com")) {
         // For these platforms, just check if we can get basic info instead of listing formats
         await youtubeDl(url, {
           ...validateOptions,
@@ -386,6 +394,10 @@ async function processDownload(downloadId: string, url: string, format: string, 
         errorMessage = "Cette vidéo n'est pas disponible pour le téléchargement.";
       } else if (error.message.includes('private')) {
         errorMessage = "Cette vidéo est privée et ne peut pas être téléchargée.";
+      } else if (error.message.includes('Requested format is not available')) {
+        errorMessage = "Format demandé non disponible. Essayez avec un format différent.";
+      } else if (error.message.includes('facebook') && error.message.includes('format')) {
+        errorMessage = "Cette vidéo Facebook ne peut pas être téléchargée dans le format demandé. Essayez un format différent.";
       } else {
         errorMessage = error.message;
       }
