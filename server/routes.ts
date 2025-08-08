@@ -293,16 +293,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 async function processDownload(downloadId: string, url: string, format: string, quality?: string, itag?: number) {
   try {
+    console.log(`Starting processDownload for ${downloadId}, URL: ${url}`);
     // Update status to processing
     await storage.updateDownload(downloadId, { 
       status: "processing",
       progress: 10
     });
+    console.log(`Set progress to 10% for ${downloadId}`);
 
     // Get video info with better error handling
     let info;
     let title = "video";
     
+    console.log(`Getting video info for ${downloadId}`);
     try {
       info = await youtubeDl(url, {
         dumpSingleJson: true,
@@ -310,6 +313,7 @@ async function processDownload(downloadId: string, url: string, format: string, 
         noWarnings: true
       });
       title = (info as any).title.replace(/[^\w\s-]/gi, ''); // Clean filename
+      console.log(`Successfully got video info for ${downloadId}: ${title}`);
     } catch (error) {
       console.error("Error getting video info:", error);
       throw new Error("Impossible d'obtenir les informations de la vidéo. L'URL pourrait être invalide ou la vidéo indisponible.");
@@ -341,6 +345,7 @@ async function processDownload(downloadId: string, url: string, format: string, 
     }
     
     console.log('Validation des options de téléchargement:', downloadOptions);
+    console.log(`Validating URL with yt-dlp for ${downloadId}`);
     
     // Test if yt-dlp can handle this URL with platform-specific validation
     try {
@@ -371,6 +376,7 @@ async function processDownload(downloadId: string, url: string, format: string, 
       throw new Error("Erreur lors de la validation de l'URL. Veuillez réessayer.");
     }
 
+    console.log(`URL validation successful for ${downloadId}, marking as completed`);
     // Mark as completed - file will be streamed directly when requested
     await storage.updateDownload(downloadId, {
       status: "completed",
@@ -381,6 +387,7 @@ async function processDownload(downloadId: string, url: string, format: string, 
       quality,
       itag
     });
+    console.log(`Successfully completed processing for ${downloadId}`);
 
   } catch (error) {
     console.error("Processing error:", error);
